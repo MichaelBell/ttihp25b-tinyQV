@@ -34,7 +34,7 @@
   "USE_LIGHTER": 0,
 
   "//": "SDC Customizations",
-  "FALLBACK_SDC_FILE": "src/base.sdc",
+  "FALLBACK_SDC_FILE": "dir::base.sdc",
 
   "//": "If you need a custom clock configuration, read the following documentation first:",
   "//": "https://tinytapeout.com/faq/#how-can-i-map-an-additional-external-clock-to-one-of-the-gpios",
