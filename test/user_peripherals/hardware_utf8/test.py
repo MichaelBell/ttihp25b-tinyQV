@@ -10,7 +10,7 @@ from tqv import TinyQV
 # When submitting your design, change this to 16 + the peripheral number
 # in peripherals.v.  e.g. if your design is i_user_simple00, set this to 16.
 # The peripheral number is not used by the test harness.
-PERIPHERAL_NUM = 24
+PERIPHERAL_NUM = 23
 
 @cocotb.test()
 async def test_project(dut):
