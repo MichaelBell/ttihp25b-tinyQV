@@ -10,8 +10,6 @@ USER_PERIPHERALS = \
     test_spike  \
 	fpu.test \
 	baby_vga.test \
-	prism.test \
-	pwl_synth.test \
 	wdt.test \
 	tqvp_laurie_dwarf_line_table_accelerator.test \
 	pulse_transmitter.test \
