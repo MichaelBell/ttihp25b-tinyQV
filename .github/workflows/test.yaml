@@ -1,5 +1,5 @@
 name: test
-on: [push, workflow_dispatch]
+on: [push, workflow_dispatch, pull_request]
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -43,5 +43,5 @@ jobs:
         with:
           name: test-vcd
           path: |
-            test/tb.vcd
+            test/*.fst
             test/results.xml

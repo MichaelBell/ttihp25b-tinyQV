@@ -1,0 +1,50 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Tue Jul 22 13:24:27 2025
+[*]
+[dumpfile] "/home/matt/work/asic-workshop/shuttle-ttsky25a/ttsky25a-tinyQV/test/sim_build/rtl/tb.fst"
+[dumpfile_mtime] "Tue Jul 22 13:24:09 2025"
+[dumpfile_size] 1070775
+[savefile] "/home/matt/work/asic-workshop/shuttle-ttsky25a/ttsky25a-tinyQV/test/user_peripherals/matt_encoder/tb.gtkw"
+[timestart] 0
+[size] 1932 999
+[pos] -1 -1
+*-29.100000 2501000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] tb.
+[treeopen] tb.user_project.
+[treeopen] tb.user_project.i_peripherals.
+[sst_width] 343
+[signals_width] 447
+[sst_expanded] 1
+[sst_vpaned_height] 295
+@28
+tb.user_project.i_peripherals.matt_encoder00.clk
+@22
+tb.user_project.i_peripherals.matt_encoder00.address[3:0]
+tb.user_project.i_peripherals.matt_encoder00.data_in[7:0]
+tb.user_project.i_peripherals.matt_encoder00.data_out[7:0]
+@28
+tb.user_project.i_peripherals.matt_encoder00.data_write
+@22
+tb.user_project.i_peripherals.matt_encoder00.debounce_cmp[7:0]
+@25
+tb.user_project.i_peripherals.matt_encoder00.enc0[7:0]
+@22
+tb.user_project.i_peripherals.matt_encoder00.enc1[7:0]
+tb.user_project.i_peripherals.matt_encoder00.enc2[7:0]
+tb.user_project.i_peripherals.matt_encoder00.enc3[7:0]
+@800022
+tb.user_project.i_peripherals.matt_encoder00.ui_in[7:0]
+@28
+(0)tb.user_project.i_peripherals.matt_encoder00.ui_in[7:0]
+(1)tb.user_project.i_peripherals.matt_encoder00.ui_in[7:0]
+(2)tb.user_project.i_peripherals.matt_encoder00.ui_in[7:0]
+(3)tb.user_project.i_peripherals.matt_encoder00.ui_in[7:0]
+(4)tb.user_project.i_peripherals.matt_encoder00.ui_in[7:0]
+(5)tb.user_project.i_peripherals.matt_encoder00.ui_in[7:0]
+(6)tb.user_project.i_peripherals.matt_encoder00.ui_in[7:0]
+(7)tb.user_project.i_peripherals.matt_encoder00.ui_in[7:0]
+@1001200
+-group_end
+[pattern_trace] 1
+[pattern_trace] 0

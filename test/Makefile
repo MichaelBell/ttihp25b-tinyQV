@@ -1,42 +1,54 @@
-# Makefile
-# See https://docs.cocotb.org/en/stable/quickstart.html for more info
+USER_PERIPHERALS = \
+	edge_counter \
+	pwm_sk \
+	full_example \
+	uart \
+	matt_encoder.test \
+	ledstrip.test \
+	impostor_ws2812b.test \
+	matt_pwm.test \
+    test_spike  \
+	fpu.test \
+	baby_vga.test \
+	prism.test \
+	pwl_synth.test \
+	wdt.test \
+	tqvp_laurie_dwarf_line_table_accelerator.test \
+	pulse_transmitter.test \
+	hardware_utf8.test \
+	prng.test \
 
-# defaults
-SIM ?= icarus
-TOPLEVEL_LANG ?= verilog
-SRC_DIR = $(PWD)/../src
-PROJECT_SOURCES = project.v
 
-ifneq ($(GATES),yes)
+.PHONY: all core prog peri $(USER_PERIPHERALS)
 
-# RTL simulation:
-SIM_BUILD				= sim_build/rtl
-VERILOG_SOURCES += $(addprefix $(SRC_DIR)/,$(PROJECT_SOURCES))
+%-results.xml:
+	@make -f test_$*.mk clean
+	make -f test_$*.mk
+	@mv results.xml $@
+	@mv sim_build/rtl/tb*.fst $*-rtl.fst || true
+	@mv sim_build/gl/tb*.fst $*-gl.fst || true
 
-else
+peri-%.xml:
+	@make -f test_basic.mk clean
+	MODULE=user_peripherals.$* make -f test_basic.mk || true
+	@if [ ! -f results.xml ]; then echo '<failure message="$* failed (crashed)" />' > results.xml; fi
+	@mv results.xml $@
+	@mv sim_build/rtl/tb.fst $*-rtl.fst || true
+	@mv sim_build/gl/tb.fst $*-gl.fst || true
 
-# Gate level simulation:
-SIM_BUILD				= sim_build/gl
-COMPILE_ARGS    += -DGL_TEST
-COMPILE_ARGS    += -DFUNCTIONAL
-COMPILE_ARGS    += -DSIM
-VERILOG_SOURCES += $(PDK_ROOT)/ihp-sg13g2/libs.ref/sg13g2_io/verilog/sg13g2_io.v
-VERILOG_SOURCES += $(PDK_ROOT)/ihp-sg13g2/libs.ref/sg13g2_stdcell/verilog/sg13g2_stdcell.v
+all: clean basic-results.xml prog-results.xml $(USER_PERIPHERALS:%=peri-%.xml)
+	@cat *results.xml peri-*.xml > results.xml
 
-# this gets copied in by the GDS action workflow
-VERILOG_SOURCES += $(PWD)/gate_level_netlist.v
+core: clean basic-results.xml
+	@cat *results.xml > results.xml
 
-endif
+prog: clean prog-results.xml
+	@cat *results.xml > results.xml
 
-# Allow sharing configuration between design and testbench via `include`:
-COMPILE_ARGS 		+= -I$(SRC_DIR)
+peri: clean $(USER_PERIPHERALS:%=peri-%.xml)
+	@cat peri-*.xml > results.xml
 
-# Include the testbench sources:
-VERILOG_SOURCES += $(PWD)/tb.v
-TOPLEVEL = tb
+$(USER_PERIPHERALS): %: peri-%.xml
 
-# MODULE is the basename of the Python test file
-MODULE = test
-
-# include cocotb's make rules to take care of the simulator setup
-include $(shell cocotb-config --makefiles)/Makefile.sim
+clean:
+	rm *results.xml peri-*.xml *.fst sim_build/rtl/tb.fst sim_build/gl/tb.fst || true

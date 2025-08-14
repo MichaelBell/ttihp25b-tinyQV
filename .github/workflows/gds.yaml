@@ -37,7 +37,7 @@ jobs:
           submodules: recursive
 
       - name: GL test
-        uses: TinyTapeout/tt-gds-action/gl_test@ttihp25b
+        uses: MichaelBell/tt-gds-action/gl_test@ttsky25a
         with:
           pdk: ihp
 
