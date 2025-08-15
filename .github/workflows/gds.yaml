@@ -27,7 +27,7 @@ jobs:
         with:
           pdk: ihp
 
-  gl_test:
+  gl_test_core:
     needs: gds
     runs-on: ubuntu-24.04
     steps:
@@ -40,6 +40,22 @@ jobs:
         uses: MichaelBell/tt-gds-action/gl_test@ttsky25a
         with:
           pdk: ihp
+          make-targets: core prog
+
+  gl_test_peri:
+    needs: gds
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: GL test
+        uses: MichaelBell/tt-gds-action/gl_test@ttsky25a
+        with:
+          pdk: ihp
+          make-targets: peri
 
   viewer:
     needs: gds
