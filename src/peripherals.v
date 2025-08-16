@@ -260,7 +260,7 @@ module tinyQV_peripherals #(parameter CLOCK_MHZ=64) (
         .user_interrupt(user_interrupts[6])
     );
 
-    tqvp_full_empty i_user_peri07 (
+    tqvp_toivoh_pwl_synth i_user_peri07 (
         .clk(clk),
         .rst_n(rst_n),
 
