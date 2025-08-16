@@ -1,8 +1,10 @@
 USER_PERIPHERALS = \
+	byte_example \
 	edge_counter \
 	pwm_sk \
 	full_example \
 	uart \
+	game_pmod \
 	matt_encoder.test \
 	ledstrip.test \
 	impostor_ws2812b.test \
@@ -13,9 +15,10 @@ USER_PERIPHERALS = \
 	wdt.test \
 	tqvp_laurie_dwarf_line_table_accelerator.test \
 	pulse_transmitter.test \
-	hardware_utf8.test \
 	prng.test \
-
+	hardware_utf8.test \
+	waveforms.test \
+	ubcd.test \
 
 .PHONY: all core prog peri $(USER_PERIPHERALS)
 

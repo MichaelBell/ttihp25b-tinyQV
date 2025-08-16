@@ -85,7 +85,7 @@ directly selectable by the running chroma for state transition or conditional ou
 
 In addition to direct input to the PRISM, a few inputs also have special functions
 (refer to the diagram below for visual).  Input ui_in[0] can be programmatically latched
-by the chroma using PRISM out[5] when configured via the ctrl_reg latch5 and latch_in_out bits.
+by the chroma using PRISM out[2] when configured via the ctrl_reg latch2 and latch_in_out bits.
 The latched input version becomes available on PRISM input in[12].  This allows for detection
 of rising or falling edges.
 
@@ -134,11 +134,14 @@ shift operation (via enable bits in the ctrl_reg).
 
 Outputs uo_out[4:2] can be driven either directly from PRISM out[3:1], or can have muxed data:
 
- - shift_out_sel (2-bits) when non-zero selects 8 or 24 bit shift out data.
  - cond_out_sel (2-bits) when non-zero selects cond_out[0] conditional output.
 
-Output uo_out[6] can be driven either directly from PRISM out[5] or can be the "fifo_full" signal
-when fifo_24 and latch5 config bits are set in ctrl_reg (more on those bits in the 3-Byte FIFO section).
+Outputs uo_out[7:5] can be driven either directly from PRISM out[6:4], or can have muxed data:
+
+ - shift_out_sel (2-bits) when non-zero selects 8 or 24 bit shift out data.
+
+Output uo_out[0] can be driven either directly from PRISM out[0] or can be the "fifo_full" signal
+when fifo_24 and latch2 config bits are set in ctrl_reg (more on those bits in the 3-Byte FIFO section).
 
 ## Peripherals
 
@@ -167,9 +170,6 @@ by TinyQV with R/W access) *and* the comm_data register (also R/W accessible).  
 compares are made available on PRISM inputs in[11] and in[15].  A running chroma can use these compare inputs
 for timing, terminal count checking, etc.
 
-## 8-Bit Communication Register
-
-![](08_8bit_comm_register.png)
 
 ## Chroma
 

@@ -21,8 +21,8 @@ Peripheral index: 7
 
 PWL Synth is a 4 channel synth with a superset of classic chiptune waveforms:
 - Each channel has 3 parameters that can be used to morph the waveform between square, pulse, triangle, sawtooth-like, and other waveforms
-	- Morphing in real time brings out the synth character
-- Volume per channel
+	- Sweep rates for each parameter allows morphing in real time to bring out the synth character
+- Volume per channel, with sweep rate and target value
 - One channel can be switched to a noise waveform
 - Detune function per channel: Plays two copies of the same waveform at slightly different pitches, for added depth.
 
@@ -93,6 +93,12 @@ The waveform for each channel is calculated in a number of steps. The input is `
 	# y = output waveform, -1 <= y <= 1
 
 where the output waveform is expressed in the range `-1 <= y <= 1`, `pwm_offset_r` and `slope_r` are in the range `0 - 1`, and `slope_r` is in the range `0 - 16`.
+These rescaled values can be calculated from the integer values stored in the registers according to
+
+	pwm_offset_r = pwm_offset / 256  # range 0 - almost 1
+	slope_r[i]   = slope[i] / 16     # range 0 - almost 16
+	amp_r        = amp / 64          # range 0 - almost 1
+
 The steps can be summarized as
 
 - The input is a sawtooth waveform with the the given period
@@ -121,46 +127,102 @@ The detuning is approximately
 
 where `octave = 7 - period_exp`.
 
+### Sweep values
+
+Sweep values can be used to make different parameters increase or decrease at a steady rate.
+The basic setup is the same for all parameters, but the details are a bit different.
+
+All sweep values have a 4 bit rate. The swept parameter is increased or decreased by one step at a frequency given by
+
+| `rate` | Frequency of parameter update |
+|--------|-------------------------------|
+| 0      | Never (off)                   |
+| 1      | Maximum rate                  |
+| 2 - 15 | Once every `2*2^rate` samples |
+
+The maximum rate for period (`f_period`) parameter is once every 8 samples; the maximum rate for amplitude, slopes, and PWM offset parameters is once every 32 samples.
+The maxiumem rate must be specified using `rate=1`. For `f_period`, the next lower rate (half as often) is given by `rate=3`, while for the other parameters, it is given by `rate=5`.
+
+Most sweep parameters specify a sign: `0 = increase, 1 = decrease`. The parameter will sweep until the sweep is stopped by changing the sweep value, or the parameter is at its extreme value.
+The amplitude sweep parameter includes a 3 bit `target` value instead, where the 6 bit target amplitude is given by `{target, target} = 9*target`.
+The amplitude will sweep up or down until it reaches the target amplitude and then stop sweeping.
+
+The rising and falling slope values `slope[0]` and `slope[1]` share a common sweep value, with an additional 2 bit `dir` value that specifies how to apply the sweep:
+
+| `dir` | Behavior                                                                   |
+|-------|----------------------------------------------------------------------------|
+| 2'b11 | Sweep both slopes                                                          |
+| 2'b01 | Sweep only `slope[0]`                                                      |
+| 2'b10 | Sweep only `slope[1]`                                                      |
+| 2'b00 | Sweep both slopes in opposite directions, flipping the sign for `slope[1]` |
+
+#### Using the sweep values
+It may be desired to sweep parameters at a rate that is somewhere in between the available rates. Unfortunately, there was no space for more bits to use for sweep values.
+Some possible ways to handle such cases are:
+
+- Update the sweep values at a regular rate, like 60 Hz.
+	- Always choose the rate that would bring the parameter closest to the desired target value at the next update, possibly without overshooting the target.
+	- The current values of the swept parameters can be read back to help calculate the desired sweep value.
+- Given an initial value and a desired final value at a final time, choose two sweep rates and calculate exactly when to switch between them in order to arrive at the desired final value.
+	- Use a timer interrupt to trigger the change in sweep rate.
+
+The slowest sweep rate is once every 2^16 cycles. With a sample rate of `fs = 1 MHz`, this results in an update rate of rougly 15 times per second.
+If you need a slower sweep rate, update the parameters directly instead.
+
 ## Register map
 
-**NOTE: The register layout will change for the final version.**
+**NOTE: Additional bit fields and registers may be added. Unused bits should be set to zero for forward compatibility.**
 
-| Address | Name        | Access | Description                                                   |
-|---------|-------------|--------|---------------------------------------------------------------|
-| 0x00    | f_period[0] | W      | Period for channel 0, 13 bits                                 |
-| 0x02    | f_period[1] | W      | Period for channel 1, 13 bits                                 |
-| 0x04    | f_period[2] | W      | Period for channel 2, 13 bits                                 |
-| 0x06    | f_period[3] | W      | Period for channel 3, 13 bits                                 |
-| 0x08    | amp[0]      | W      | Amplitude for channel 0, 6 bits                               |
-| 0x0a    | amp[1]      | W      | Amplitude for channel 1, 6 bits                               |
-| 0x0c    | amp[2]      | W      | Amplitude for channel 2, 6 bits                               |
-| 0x0e    | amp[3]      | W      | Amplitude for channel 3, 6 bits                               |
-| 0x10    | mode[0]     | W      | Mode bits for channel 0, 12 bits                              |
-| 0x12    | mode[1]     | W      | Mode bits for channel 1, 12 bits                              |
-| 0x14    | mode[2]     | W      | Mode bits for channel 2, 12 bits                              |
-| 0x16    | mode[3]     | W      | Mode bits for channel 3, 12 bits                              |
-| 0x18    | params[0]   | W      | Parameter bits for channel 0, 16 bits                         |
-| 0x1a    | params[1]   | W      | Parameter bits for channel 1, 16 bits                         |
-| 0x1c    | params[2]   | W      | Parameter bits for channel 2, 16 bits                         |
-| 0x1e    | params[3]   | W      | Parameter bits for channel 3, 16 bits                         |
+| Address | Name          | Access | Description                                                 |
+|---------|---------------|--------|-------------------------------------------------------------|
+| 0x00    | f_period[0]   | RW     | Period for channel 0, 13 bits                               |
+| 0x02    | amp[0]        | RW     | Amplitude for channel 0, 6 bits                             |
+| 0x04    | slope[0][0]   | RW     | Rising slope for channel 0, 8 bits                          |
+| 0x06    | slope[1][0]   | RW     | Falling slope for channel 0, 8 bits                         |
+| 0x08    | pwm_offset[0] | RW     | PWM offset for channel 0, 8 bits                            |
+| 0x0a    | mode[0]       | RW     | Mode bits for channel 0, 4 bits                             |
+| 0x0c    | sweep_pa[0]   | W      | Period and amplitude sweep for channel 0                    |
+| 0x0e    | sweep_ws[0]   | W      | PWM offset and slope sweep for channel 0                    |
+| 0x10    | f_period[1]   | RW     | Period for channel 1, 13 bits                               |
+| 0x12    | amp[1]        | RW     | Amplitude for channel 1, 6 bits                             |
+| 0x14    | slope[0][1]   | RW     | Rising slope for channel 1, 8 bits                          |
+| 0x16    | slope[1][1]   | RW     | Falling slope for channel 1, 8 bits                         |
+| 0x18    | pwm_offset[1] | RW     | PWM offset for channel 1, 8 bits                            |
+| 0x1a    | mode[1]       | RW     | Mode bits for channel 1, 4 bits                             |
+| 0x1c    | sweep_pa[1]   | W      | Period and amplitude sweep for channel 1                    |
+| 0x1e    | sweep_ws[1]   | W      | PWM offset and slope sweep for channel 1                    |
+| 0x20    | f_period[2]   | RW     | Period for channel 2, 13 bits                               |
+| 0x22    | amp[2]        | RW     | Amplitude for channel 2, 6 bits                             |
+| 0x24    | slope[0][2]   | RW     | Rising slope for channel 2, 8 bits                          |
+| 0x26    | slope[1][2]   | RW     | Falling slope for channel 2, 8 bits                         |
+| 0x28    | pwm_offset[2] | RW     | PWM offset for channel 2, 8 bits                            |
+| 0x2a    | mode[2]       | RW     | Mode bits for channel 2, 4 bits                             |
+| 0x2c    | sweep_pa[2]   | W      | Period and amplitude sweep for channel 2                    |
+| 0x2e    | sweep_ws[2]   | W      | PWM offset and slope sweep for channel 2                    |
+| 0x30    | f_period[3]   | RW     | Period for channel 3, 13 bits                               |
+| 0x32    | amp[3]        | RW     | Amplitude for channel 3, 6 bits                             |
+| 0x34    | slope[0][3]   | RW     | Rising slope for channel 3, 8 bits                          |
+| 0x36    | slope[1][3]   | RW     | Falling slope for channel 3, 8 bits                         |
+| 0x38    | pwm_offset[3] | RW     | PWM offset for channel 3, 8 bits                            |
+| 0x3a    | mode[3]       | RW     | Mode bits for channel 3, 4 bits                             |
+| 0x3c    | sweep_pa[3]   | W      | Period and amplitude sweep for channel 3                    |
+| 0x3e    | sweep_ws[3]   | W      | PWM offset and slope sweep for channel 3                    |
 
-All registers must be written with 16 bit writes at the given addresses.
-The `mode` and `params` registers are composed according to
+All registers must be written with 16 bit writes at the given addresses, and have zero intial value.
 
-	mode[i] = {slope_exp[1][i][3:0], slope_exp[0][i][3:0], lfsr_en[i], detune_exp[i][2:0]}
-	params[i] = {pwm_offset[7:0], slope_mantissa[1][i][3:0], slope_mantissa[0][i][3:0]}
+The layouts of the mode and sweep registers are
 
-where
+|      |       3 |        2:0 |
+|------|---------|------------|
+| mode | lfsr_en | detune_exp |
 
-	slope[part][i] = {slope_exp[part][i], slope_mantissa[part][i]}
+|          |          12 |         11:8 | 7 |         6:4 |       3:0 |
+|----------|-------------|--------------|---|-------------|-----------|
+| sweep_pa |period: sign | period: rate | X | amp: target | amp: rate |
 
-The waveform calculations above expressed in rescaled values:
-
-	pwm_offset_r = pwm_offset / 256  # range 0 - almost 1
-	slope_r      = slope / 16        # range 0 - almost 16
-	amp_r        = amp / 64          # range 0 - almost 1
-
-All registers start at initial value 0.
+|          |              12 |             11:8 | 7 |        6:5 |           4 |         3:0 |
+|----------|-----------------|------------------|---|------------|-------------|-------------|
+| sweep_ws |pwm_offset: sign | pwm_offset: rate | X | slope: dir | slope: sign | slope: rate |
 
 ## IO pins
 

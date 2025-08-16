@@ -3,13 +3,15 @@
 module vga_timing (
     input wire clk,
     input wire rst_n,
+    input wire cli,
     output reg [5:0] x_hi,
     output reg [4:0] x_lo,
     output reg [4:0] y_hi,
     output reg [5:0] y_lo,
     output reg hsync,
     output reg vsync,
-    output wire blank
+    output wire blank,
+    output reg interrupt
 );
 
 // 1024x768 60Hz CVT (63.5 MHz pixel clock, rounded to 64 MHz) - courtesy of RebelMike
@@ -34,6 +36,7 @@ always @(posedge clk) begin
         y_lo <= 0;
         hsync <= 0;
         vsync <= 0;
+        interrupt <= 0;
     end else begin
         if ({x_hi, x_lo} == `H_NEXT) begin
             x_hi <= 0;
@@ -48,6 +51,7 @@ always @(posedge clk) begin
             if({y_hi, y_lo} == `V_NEXT) begin
                 y_hi <= 0;
                 y_lo <= 0;
+                interrupt <= 1;
             end else if (y_lo == `V_ROLL) begin
                 y_hi <= y_hi + 1;
                 y_lo <= 0;
@@ -55,8 +59,11 @@ always @(posedge clk) begin
                 y_lo <= y_lo + 1;
             end
         end
-        hsync <= ({x_hi, x_lo} >= `H_SYNC && {x_hi, x_lo} < `H_BPORCH);
+        hsync <= !({x_hi, x_lo} >= `H_SYNC && {x_hi, x_lo} < `H_BPORCH);
         vsync <= ({y_hi, y_lo} >= `V_SYNC && {y_hi, y_lo} < `V_BPORCH);
+        if (cli || {y_hi, y_lo} == 0) begin
+            interrupt <= 0;
+        end
     end
 end
 

@@ -53,11 +53,11 @@ module tinyQV_peripherals #(parameter CLOCK_MHZ=64) (
     assign data_read_n_peri = data_read_n | {2{data_ready_r}};
 
     wire [31:0] data_from_user_peri   [0:15];
-    wire [7:0]  data_from_simple_peri [0:7];
+    wire [7:0]  data_from_simple_peri [0:15];
     wire        data_ready_from_user_peri   [0:15];
 
     wire [7:0]  uo_out_from_user_peri   [0:15];
-    wire [7:0]  uo_out_from_simple_peri [0:7];
+    wire [7:0]  uo_out_from_simple_peri [0:15];
     reg [7:0] uo_out_comb;
     assign uo_out = uo_out_comb;
 
@@ -99,7 +99,7 @@ module tinyQV_peripherals #(parameter CLOCK_MHZ=64) (
 
         if (addr_in[10]) begin
             peri_simple[addr_in[7:4]] = 1;
-            data_from_peri = {24'h0, data_from_simple_peri[addr_in[6:4]]};
+            data_from_peri = {24'h0, data_from_simple_peri[addr_in[7:4]]};
             data_ready_from_peri = 1;
         end else begin
             peri_user[addr_in[9:6]] = 1;
@@ -152,7 +152,7 @@ module tinyQV_peripherals #(parameter CLOCK_MHZ=64) (
                 uo_out_comb[i] = 0;
 
                 if (gpio_out_func_sel[i][4]) begin
-                    uo_out_comb[i] = uo_out_from_simple_peri[gpio_out_func_sel[i][2:0]][i];
+                    uo_out_comb[i] = uo_out_from_simple_peri[gpio_out_func_sel[i][3:0]][i];
                 end else begin
                     uo_out_comb[i] = uo_out_from_user_peri[gpio_out_func_sel[i][3:0]][i];
                 end
@@ -182,10 +182,23 @@ module tinyQV_peripherals #(parameter CLOCK_MHZ=64) (
         .user_interrupt(user_interrupts[PERI_UART+1:PERI_UART])
     );
 
-    // There is no peripheral 3, UART uses its interrupt.
-    assign uo_out_from_user_peri[3] = 8'h0;
-    assign data_from_user_peri[3] = 32'h0;
-    assign data_ready_from_user_peri[3] = 1;
+    // Peripheral 3 is a full peripheral but with no interrupt
+    tqvp_game_pmod i_user_peri03(
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .ui_in(ui_in),
+        .uo_out(uo_out_from_user_peri[3]),
+
+        .address(addr_in[5:0]),
+        .data_in(data_in),
+
+        .data_write_n(data_write_n    | {2{~peri_user[3]}}),
+        .data_read_n(data_read_n_peri | {2{~peri_user[3]}}),
+
+        .data_out(data_from_user_peri[3]),
+        .data_ready(data_ready_from_user_peri[3])
+    );
 
     // --------------------------------------------------------------------- //
     // Full interface peripherals
@@ -526,8 +539,7 @@ module tinyQV_peripherals #(parameter CLOCK_MHZ=64) (
         .data_out(data_from_simple_peri[6])
     );
 
-
-    tqvp_rebeccargb_hardware_utf8 hardware_utf8 (
+    tqvp_rebeccargb_universal_decoder ubcd (
         .clk(clk),
         .rst_n(rst_n),
 
@@ -540,6 +552,126 @@ module tinyQV_peripherals #(parameter CLOCK_MHZ=64) (
         .data_in(data_in[7:0]),
 
         .data_out(data_from_simple_peri[7])
+    );
+
+    tqvp_rebeccargb_hardware_utf8 hardware_utf8 (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .ui_in(ui_in),
+        .uo_out(uo_out_from_simple_peri[8]),
+
+        .address(addr_in[3:0]),
+
+        .data_write((data_write_n != 2'b11) & peri_simple[8]),
+        .data_in(data_in[7:0]),
+
+        .data_out(data_from_simple_peri[8])
+    );
+
+    tqvp_meiniKi_waveforms i_tqvp_meiniKi_waveforms (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .ui_in(ui_in),
+        .uo_out(uo_out_from_simple_peri[9]),
+
+        .address(addr_in[3:0]),
+
+        .data_write((data_write_n != 2'b11) & peri_simple[9]),
+        .data_in(data_in[7:0]),
+
+        .data_out(data_from_simple_peri[9])
+    );
+
+    tqvp_byte_empty i_user_simple010 (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .ui_in(ui_in),
+        .uo_out(uo_out_from_simple_peri[10]),
+
+        .address(addr_in[3:0]),
+
+        .data_write((data_write_n != 2'b11) & peri_simple[10]),
+        .data_in(data_in[7:0]),
+
+        .data_out(data_from_simple_peri[10])
+    );
+
+    tqvp_byte_empty i_user_simple011 (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .ui_in(ui_in),
+        .uo_out(uo_out_from_simple_peri[11]),
+
+        .address(addr_in[3:0]),
+
+        .data_write((data_write_n != 2'b11) & peri_simple[11]),
+        .data_in(data_in[7:0]),
+
+        .data_out(data_from_simple_peri[11])
+    );
+
+    tqvp_byte_empty i_user_simple012 (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .ui_in(ui_in),
+        .uo_out(uo_out_from_simple_peri[12]),
+
+        .address(addr_in[3:0]),
+
+        .data_write((data_write_n != 2'b11) & peri_simple[12]),
+        .data_in(data_in[7:0]),
+
+        .data_out(data_from_simple_peri[12])
+    );
+
+    tqvp_byte_empty i_user_simple013 (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .ui_in(ui_in),
+        .uo_out(uo_out_from_simple_peri[13]),
+
+        .address(addr_in[3:0]),
+
+        .data_write((data_write_n != 2'b11) & peri_simple[13]),
+        .data_in(data_in[7:0]),
+
+        .data_out(data_from_simple_peri[13])
+    );
+
+    tqvp_byte_empty i_user_simple014 (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .ui_in(ui_in),
+        .uo_out(uo_out_from_simple_peri[14]),
+
+        .address(addr_in[3:0]),
+
+        .data_write((data_write_n != 2'b11) & peri_simple[14]),
+        .data_in(data_in[7:0]),
+
+        .data_out(data_from_simple_peri[14])
+    );
+
+    tqvp_byte_example i_user_simple015 (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .ui_in(ui_in),
+        .uo_out(uo_out_from_simple_peri[15]),
+
+        .address(addr_in[3:0]),
+
+        .data_write((data_write_n != 2'b11) & peri_simple[15]),
+        .data_in(data_in[7:0]),
+
+        .data_out(data_from_simple_peri[15])
     );
 
 endmodule
