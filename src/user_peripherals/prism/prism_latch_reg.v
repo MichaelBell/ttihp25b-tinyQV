@@ -51,6 +51,15 @@ module prism_latch_reg
     /* verilator lint_off PINMISSING */
     genvar b;
     generate
+`ifdef SCL_sg13g2_stdcell
+        (* keep = 1 *) sg13g2_and2_1 gate_and (.A(enable), .B(wr), .X(pre_reset));
+        if (WIDTH < 6) begin : GEN_OR_X1
+            (* keep = 1 *) sg13g2_or2_1 gate_or (.A(pre_reset), .B(~rst_n), .X(gate));
+        end else begin : GEN_OR_X2
+            (* keep = 1 *) sg13g2_or2_2 gate_or (.A(pre_reset), .B(~rst_n), .X(gate));
+        end
+`endif
+`ifdef SCL_sky130_fd_sc_hd
         (* keep = 1 *) sky130_fd_sc_hd__and2_1 gate_and (.A(enable), .B(wr), .X(pre_reset));
         if (WIDTH < 6) begin : GEN_OR_X1
             (* keep = 1 *) sky130_fd_sc_hd__or2_1 gate_or (.A(pre_reset), .B(~rst_n), .X(gate));
@@ -59,10 +68,16 @@ module prism_latch_reg
         end else begin : GEN_OR_X4
             (* keep = 1 *) sky130_fd_sc_hd__or2_4 gate_or (.A(pre_reset), .B(~rst_n), .X(gate));
         end
+`endif
         
         for (b = 0; b < WIDTH; b = b + 1)
         begin : gen_prism_bit
+`ifdef SCL_sg13g2_stdcell
+            (* keep = 1 *) sg13g2_dlhq_1 prism_cfg_bit
+`endif
+`ifdef SCL_sky130_fd_sc_hd
             (* keep = 1 *) sky130_fd_sc_hd__dlxtp_1 prism_cfg_bit
+`endif
             (
                 .D    (data_in[b]),
                 .GATE (gate),
