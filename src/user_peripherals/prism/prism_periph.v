@@ -168,30 +168,6 @@ module tqvp_prism (
     wire  [0:0]         cond_out;
 
     // =============================================================
-    // Crate a divide by 2 clock using clock gate
-    // =============================================================
-`ifdef DONT_COMPILE
-    wire                clk_div2;
-    reg                 clk_gate;
-
-    always @(negedge clk or negedge rst_n)
-    begin
-        if (~rst_n)
-            clk_gate <= 1'b0;
-        else// if (prism_enable)
-            clk_gate <= ~clk_gate;
-    end
-
-`ifdef SIM
-    assign clk_div2 = clk_gate & clk;
-`else
-    /* verilator lint_off PINMISSING */
-    sky130_fd_sc_hd__dlclkp_4 CG( .CLK(clk), .GCLK(clk_div2), .GATE(clk_gate) );
-    /* verilator lint_on PINMISSING */
-`endif
-`endif
-    
-    // =============================================================
     // Instantiate the PRISM controller
     // =============================================================
     prism
@@ -410,7 +386,6 @@ module tqvp_prism (
     end
 
     assign prism_rst_n = rst_n & prism_enable;
-    //always @(posedge clk_div2 or negedge prism_rst_n)
     always @(posedge clk or negedge prism_rst_n)
     begin
         if (!prism_rst_n)
@@ -580,7 +555,7 @@ module tqvp_prism (
                 ctrl_reg <= ctrl_bits_in;
 
             if (count1_reg_en & prism_wr)
-                count_preloads{23:0] <= data_in;
+                count_preloads[23:0] <= data_in;
             if ((count2_reg_en | count1_toggle_en) & prism_wr)
                 count_preloads[31:24] <= data_in;
         end
