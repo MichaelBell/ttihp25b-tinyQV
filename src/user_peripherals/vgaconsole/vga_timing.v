@@ -1,6 +1,6 @@
 `default_nettype none
 
-module vga_timing (
+module vga_timing_cc (
     input wire clk,
     input wire rst_n,
     input wire cli,

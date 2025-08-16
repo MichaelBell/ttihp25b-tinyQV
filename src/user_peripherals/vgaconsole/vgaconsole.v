@@ -116,7 +116,7 @@ module tqvp_cattuto_vgaconsole #(parameter CLOCK_MHZ=64) (
     // TinyVGA PMOD
     assign uo_out = {hsync_buf, B[0], G[0], R[0], vsync_buf, B[1], G[1], R[1]};
 
-    vga_timing hvsync_gen (
+    vga_timing_cc hvsync_gen (
         .clk(clk),
         .rst_n(rst_n),
         .hsync(hsync),
@@ -201,7 +201,7 @@ module tqvp_cattuto_vgaconsole #(parameter CLOCK_MHZ=64) (
 
     wire [34:0] char_data;
 
-    char_rom char_rom_inst (
+    char_rom_cc char_rom_inst (
         .address(char_index),
         .data(char_data) 
     );
