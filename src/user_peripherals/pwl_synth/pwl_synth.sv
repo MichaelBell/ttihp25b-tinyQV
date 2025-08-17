@@ -27,10 +27,29 @@ module tqvp_toivoh_pwl_synth #(parameter BITS=12, OCT_BITS=3, DETUNE_EXP_BITS=3,
 		output [31:0] data_out,     // Data out from the peripheral, bottom 8, 16 or all 32 bits are valid on read when data_ready is high.
 		output        data_ready,
 
+`ifdef USE_TEST_INTERFACE
+		input wire en_external,
+		input wire state_override_en,
+		input int state_override, // (term_index << 8) | state
+		input wire [2:0] step_part_enables, // {post_en, main_en, pre_en}
+		// interface for internal registers
+		input int ireg_raddr, ireg_waddr,
+		output int ireg_rdata,
+		input int ireg_wdata,
+		// expose internal register writes
+		output wire reg_we_internal_out,
+		output int reg_waddr_internal_out,
+		output int reg_wdata_internal_out,
+`endif
+
 		output        user_interrupt  // Dedicated interrupt request for this peripheral
 	);
 
 	wire reset = !rst_n;
+
+`ifndef USE_TEST_INTERFACE
+		wire en_external = 1;
+`endif
 
 /*
 	// Temporary cfg register for shared parameters
@@ -58,22 +77,42 @@ module tqvp_toivoh_pwl_synth #(parameter BITS=12, OCT_BITS=3, DETUNE_EXP_BITS=3,
 	wire [5:0] address2 = {address[3:1], address[5:4], address[0]};
 
 	// Read / write interface to pwls_multichannel_ALU_unit
-	wire [$clog2(`REGS_PER_CHANNEL)+$clog2(NUM_CHANNELS)-1:0] reg_addr = address2[5:1];
+	wire [`REG_ADDR_BITS-1:0] reg_addr = address2[5:1];
 	//wire read_en = (data_read_n != 2'b11);
 
+
+	wire reg_raddr_valid = (data_read_n != 2'b11);
+
+`ifdef USE_NEW_READ
+	wire en = en_external;
+	wire next_en = 1; // TODO: take en_external into account if we want to use the reg_raddr_p interface.
+
+	wire [`REG_ADDR_BITS-1:0] reg_raddr = reg_addr;
+	wire reg_rdata_valid_next;
+
+	reg reg_rdata_valid;
+	always_ff @(posedge clk) reg_rdata_valid <= !reset && reg_rdata_valid_next;
+	assign data_ready = reg_rdata_valid;
+`else
 	reg read_en;
-	//reg [5:0] reg_addr_last;
-	//wire [5:0] reg_raddr = reg_addr;
-	wire next_read_en = (data_read_n != 2'b11);
+	//reg [`REG_ADDR_BITS-1:0] reg_addr_last;
+	//wire [`REG_ADDR_BITS-1:0] reg_raddr_p = reg_addr;
+	wire next_read_en = reg_raddr_valid;
 	always_ff @(posedge clk) begin
 		if (reset) read_en <= 0;
 		else read_en <= next_read_en;
 		//reg_addr_last <= reg_addr;
 	end
 
-	wire [5:0] reg_raddr = reg_addr;
-	//wire [5:0] reg_raddr = reg_addr_last;
-	//wire [5:0] reg_raddr = {reg_addr[4:2], reg_addr_last[1:0]}; // register the channel bits, most timing critical?
+	wire [`REG_ADDR_BITS-1:0] reg_raddr_p = reg_addr;
+	//wire [`REG_ADDR_BITS-1:0] reg_raddr_p = reg_addr_last;
+	//wire [`REG_ADDR_BITS-1:0] reg_raddr_p = {reg_addr[4:2], reg_addr_last[1:0]}; // register the channel bits, most timing critical?
+
+	wire en = !read_en && en_external;
+	wire next_en = !next_read_en;
+	assign data_ready = read_en;
+`endif
+
 
 `ifdef USE_NEW_REGMAP_A
 	wire reg_we = (data_write_n[1] != data_write_n[0]); // Accept 16 or 32 bit writes for now
@@ -88,16 +127,29 @@ module tqvp_toivoh_pwl_synth #(parameter BITS=12, OCT_BITS=3, DETUNE_EXP_BITS=3,
 	wire [`REG_BITS-1:0] reg_rdata;
 	wire pwm_out;
 	pwls_multichannel_ALU_unit #(.BITS(BITS), .OCT_BITS(OCT_BITS), .DETUNE_EXP_BITS(DETUNE_EXP_BITS), .SLOPE_EXP_BITS(SLOPE_EXP_BITS), .NUM_CHANNELS(NUM_CHANNELS)) mc_alu_unit(
-		.clk(clk), .reset(reset), .en(!read_en), .next_en(!next_read_en),
+		.clk(clk), .reset(reset), .en(en), .next_en(next_en),
 		.reg_waddr(reg_addr), .reg_wdata(reg_wdata), .reg_we(reg_we),
 `ifdef USE_NEW_REGMAP_A
 		.control_reg_write(1), .state_reg_write(!address2[0]),
 `else
 		.control_reg_write(1), .state_reg_write(1),
 `endif
-		.reg_raddr_p(reg_raddr), .next_reg_raddr_p(reg_addr), .reg_rdata_p(reg_rdata),
+
+`ifdef USE_NEW_READ
+		.reg_raddr(reg_raddr), .reg_raddr_valid(reg_raddr_valid), .reg_rdata(reg_rdata), .reg_rdata_valid_next(reg_rdata_valid_next),
+`else
+		.reg_raddr_p(reg_raddr_p), .next_reg_raddr_p(reg_addr), .reg_rdata_p(reg_rdata),
+`endif
+
 		//.detune_exp(detune_exp),
 		.tri_offset(tri_offset), .slope_exp (slope_exp), .slope_offset(slope_offset), //.amp(amp),
+
+`ifdef USE_TEST_INTERFACE
+	.state_override_en(state_override_en), .state_override(state_override), .step_part_enables(step_part_enables),
+	.ireg_raddr(ireg_raddr), .ireg_waddr(ireg_waddr), .ireg_rdata(ireg_rdata), .ireg_wdata(ireg_wdata),
+	.reg_we_internal_out(reg_we_internal_out), .reg_waddr_internal_out(reg_waddr_internal_out), .reg_wdata_internal_out(reg_wdata_internal_out),
+`endif
+
 		.out_acc_out(out_acc), .pwm_out(pwm_out)
 	);
 
@@ -105,7 +157,6 @@ module tqvp_toivoh_pwl_synth #(parameter BITS=12, OCT_BITS=3, DETUNE_EXP_BITS=3,
 	assign uo_out = pwm_out ? '1 : 0;
 
 	assign data_out = reg_rdata;
-	assign data_ready = read_en;
 	assign user_interrupt = 1'b0;
 endmodule
 
@@ -193,8 +244,10 @@ module pwls_ALU #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OUT_RSHIFT=3
 	endgenerate
 	wire [BITS-1-1:0] shl_sat_mask = ~rev_shl_mask >> (15 - (BITS-2));
 
+	wire do_sat_shl_minus_corner = BITS == 12 ? (src2_lshift[3:2] == '1) : (src2_lshift >= BITS);
+
 	wire do_sat_shl_plus  = (src2_in[BITS-1] == 0) && |( src2_in & shl_sat_mask);
-	wire do_sat_shl_minus = (src2_in[BITS-1] == 1) && |(~src2_in & shl_sat_mask);
+	wire do_sat_shl_minus = (src2_in[BITS-1] == 1) && (|(~src2_in & shl_sat_mask) | do_sat_shl_minus_corner);
 	wire do_sat_shl = do_sat_shl_plus || do_sat_shl_minus;
 	wire sat_shl_sign = src2_in[BITS-1];
 
@@ -255,6 +308,13 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 		input wire [`CHANNEL_MODE_BITS-1:0] channel_mode,
 		input wire [`SWEEP_DIR_BITS-1:0] sweep_dir,
 		input wire [`SWEEP_INDEX_BITS-1:0] sweep_index,
+`ifdef USE_NEW_READ
+		input wire [`SWEEP_INDEX_BITS-1:0] reg_read_index,
+`endif
+
+`ifdef USE_TEST_INTERFACE
+		input wire [2:0] step_part_enables, // {post_en, main_en, pre_en}
+`endif
 
 		output wire [`SRC1_SEL_BITS-1:0] src1_sel_out,
 		output wire keep_exp_on_top_out,
@@ -270,6 +330,15 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 		output wire reg_we_out,
 		output wire sweep_sign_out
 	);
+
+	wire pre_en, main_en, post_en;
+`ifdef USE_TEST_INTERFACE
+	assign {post_en, main_en, pre_en} = step_part_enables;
+`else
+	assign pre_en = 1;
+	assign main_en = 1;
+	assign post_en = 1;
+`endif
 
 	//wire sweep_sign = sweep_dir[0];
 	// Decode sweep_dir
@@ -372,7 +441,7 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 					src2_sel = `SRC2_SEL_ACC;
 					inv_src2 = 1; carry_in = 1;
 					pred_we = 1; pred_next_use_cmp = 1; // save comparison sign
-					part_we = 1; part_sel = (sweep_index == `SWEEP_INDEX_AMP) ? `PART_SEL_NEQ : `PART_SEL_NOSAT; // save equality
+					part_we = main_en; part_sel = (sweep_index == `SWEEP_INDEX_AMP) ? `PART_SEL_NEQ : `PART_SEL_NOSAT; // save equality
 				end
 				3: begin
 					// Increase/decrease parameter in acc
@@ -429,7 +498,6 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 						inv_src1 = 0; inv_src2 = 0; carry_in = 0;
 						src2_lshift = 0;
 						src2_lshift_extra = 0;
-						dest_sel = `DEST_SEL_PHASE; dest_we_only_if_oct_en = 1;
 					end else begin // LFSR step
 						src1_sel = `SRC1_SEL_ZERO;
 						src2_sel = `SRC2_SEL_PHASE_MODIFIED;
@@ -437,7 +505,6 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 						inv_src1 = 0; inv_src2 = 0; carry_in = 0;
 						src2_lshift = 1;
 						src2_lshift_extra = 0;
-						dest_sel = `DEST_SEL_PHASE; dest_we_only_if_oct_en = 1;
 					end
 				end else begin
 					src1_sel = `SRC1_SEL_PHASE;
@@ -446,8 +513,12 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 					inv_src1 = 0; inv_src2 = 0; carry_in = 0;
 					src2_lshift = osc_shift;
 					src2_lshift_extra = !pred;
-					dest_sel = `DEST_SEL_PHASE; dest_we_only_if_oct_en = 1;
 				end
+`ifdef USE_PHASE_LATCHES
+				dest_sel = `DEST_SEL_ACC; // write the phase to acc
+`else
+				dest_sel = `DEST_SEL_PHASE; dest_we_only_if_oct_en = 1;
+`endif
 			end
 			`STATE_DETUNE: begin
 				src1_sel = `SRC1_SEL_PHASE;
@@ -456,6 +527,11 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 				inv_src1 = 0; inv_src2 = sub_channel; carry_in = 0;
 				src2_lshift = detune_exp;
 				dest_sel = `DEST_SEL_ACC;
+
+`ifdef USE_PHASE_LATCHES
+				// Write the phase from acc to phase, if we are in the first subchannel so that the new phase is stored in acc
+				reg_we_if_oct_en = (sub_channel == 0);
+`endif
 			end
 			`STATE_TRI: begin
 				src1_sel = `SRC1_SEL_TRI_OFFSET;
@@ -463,7 +539,7 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 				sat_en = 1;
 				inv_src1 = 0; inv_src2 = acc_sign; carry_in = 0;
 				src2_lshift = 0;
-				part_we = 1;
+				part_we = main_en;
 				dest_sel = `DEST_SEL_ACC;
 			end
 /*
@@ -566,7 +642,8 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 				src2_sext = 1;
 				dest_sel = `DEST_SEL_OUT_ACC;
 
-				part_we = 1; part_sel = `PART_SEL_SWEEP;
+				// Prepare for first step of sweep program, if it comes next
+				part_we = pre_en; part_sel = `PART_SEL_SWEEP;
 			end
 
 			default: begin
@@ -590,10 +667,15 @@ module pwls_state_decoder #(parameter SHIFT_COUNT_BITS=4, DETUNE_EXP_BITS=3, SLO
 				part_sel = 'X;
 			end
 		endcase
+
+		if (!main_en) begin
+			dest_sel = `DEST_SEL_NOTHING;
+			pred_we = 0;
+		end
 	end
 
 	wire [`DEST_SEL_BITS-1:0] dest_sel_eff = (dest_we_only_if_oct_en && !oct_enable) ? `DEST_SEL_NOTHING : dest_sel;
-	wire reg_we = (reg_we_if_oct_en && oct_enable) && (!reg_we_only_if_part || part);
+	wire reg_we = (reg_we_if_oct_en && oct_enable) && (!reg_we_only_if_part || part) && post_en;
 
 
 	named_buffer #(.BITS(`SRC1_SEL_BITS)) nb_src1_sel(.in(src1_sel), .out(src1_sel_out));
@@ -632,6 +714,9 @@ module pwls_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OCT_BIT
 		input wire first_term, sub_channel, oct_counter_we,
 		input wire [`SWEEP_DIR_BITS-1:0] sweep_dir,
 		input wire [`SWEEP_INDEX_BITS-1:0] sweep_index,
+`ifdef USE_NEW_READ
+		input wire [`SWEEP_INDEX_BITS-1:0] reg_read_index,
+`endif
 
 		input wire [OCT_BITS-1:0] octave,
 		input wire [DETUNE_EXP_BITS-1:0] detune_exp,
@@ -655,6 +740,14 @@ module pwls_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OCT_BIT
 
 		output wire [`DIVIDER_BITS-1:0] sample_counter,
 
+`ifdef USE_TEST_INTERFACE
+		input wire [2:0] step_part_enables, // {post_en, main_en, pre_en}
+		// interface for internal registers
+		input int ireg_raddr, ireg_waddr,
+		output int ireg_rdata,
+		input int ireg_wdata,
+`endif
+
 		output wire [BITS_E-1:0] acc_out,
 		output wire [BITS-1:0] out_acc_out
 	);
@@ -676,6 +769,12 @@ module pwls_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OCT_BIT
 	localparam ACC_BITS = 16;
 `else
 	localparam ACC_BITS = BITS_E;
+`endif
+
+`ifndef USE_TEST_INTERFACE
+	int ireg_waddr, ireg_wdata;
+	assign ireg_waddr = `TST_ADDR_NOTHING;
+	assign ireg_wdata = 0;
 `endif
 
 
@@ -748,6 +847,9 @@ module pwls_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OCT_BIT
 	always_ff @(posedge clk) begin
 		if (reset) oct_counter <= 0;
 		else if (oct_counter_we) oct_counter <= next_oct_counter;
+`ifdef USE_TEST_INTERFACE
+		if (ireg_waddr == `TST_ADDR_OCT_COUNTER) oct_counter <= ireg_wdata;
+`endif
 	end
 
 
@@ -790,6 +892,7 @@ module pwls_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OCT_BIT
 `ifdef PIPELINE
 	pwls_state_decoder #(.SHIFT_COUNT_BITS(SHIFT_COUNT_BITS), .DETUNE_EXP_BITS(DETUNE_EXP_BITS), .SLOPE_EXP_BITS(SLOPE_EXP_BITS), .OUT_RSHIFT(OUT_RSHIFT), .BITS(BITS)) state_decoder_early(
 		.state(state), .extra_term(extra_term),
+		TODO: step_part_enables
 
 		.src1_sel_out(src1_sel),
 		.keep_exp_on_top_out(keep_exp_on_top),
@@ -814,6 +917,9 @@ module pwls_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OCT_BIT
 
 	pwls_state_decoder #(.SHIFT_COUNT_BITS(SHIFT_COUNT_BITS), .DETUNE_EXP_BITS(DETUNE_EXP_BITS), .SLOPE_EXP_BITS(SLOPE_EXP_BITS), .OUT_RSHIFT(OUT_RSHIFT), .BITS(BITS)) state_decoder_late(
 		.state(state_late), .extra_term(extra_term_late),
+`ifdef USE_TEST_INTERFACE
+		.step_part_enables(step_part_enables),
+`endif
 
 		.osc_shift(osc_shift), .oct_enable(oct_enable), .acc_sign(acc[BITS-1]), .pred(pred), .part(part), .first_term(first_term), .sub_channel(sub_channel),
 		.detune_exp(detune_exp), .slope_exp(slope_exp), .channel_mode(channel_mode), .sweep_dir(sweep_dir), .sweep_index(sweep_index),
@@ -856,6 +962,9 @@ module pwls_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OCT_BIT
 			// Update condition is matched with update condition for phase for LFSR
 			if (en && dest_sel == `DEST_SEL_PHASE && !pred && channel_mode[`CHANNEL_MODE_BIT_NOISE]) lfsr_extra_bits <= lfsr_extra_bits_next;
 		end
+`ifdef USE_TEST_INTERFACE
+		if (ireg_waddr == `TST_ADDR_LFSR_EXTRA_BITS) lfsr_extra_bits <= ireg_wdata;
+`endif
 	end
 
 	// 11 bit LFSR
@@ -1007,6 +1116,13 @@ module pwls_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OCT_BIT
 			if (pred_we) pred <= pred_next;
 			if (part_we) part <= part_next;
 		end
+
+`ifdef USE_TEST_INTERFACE
+		if (ireg_waddr == `TST_ADDR_ACC) acc <= ireg_wdata;
+		if (ireg_waddr == `TST_ADDR_OUT_ACC) out_acc <= ireg_wdata;
+		if (ireg_waddr == `TST_ADDR_PRED) pred <= ireg_wdata;
+		if (ireg_waddr == `TST_ADDR_PART) part <= ireg_wdata;
+`endif
 	end
 
 	assign src1_sel_out = src1_sel;
@@ -1023,6 +1139,21 @@ module pwls_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BITS=4, OCT_BIT
 	assign out_acc_out = out_acc_out0;
 	assign part_out = part;
 	assign sample_counter = oct_counter;
+
+
+`ifdef USE_TEST_INTERFACE
+	always_comb begin
+		ireg_rdata = -1;
+		case (ireg_raddr)
+			`TST_ADDR_ACC: ireg_rdata = acc;
+			`TST_ADDR_OUT_ACC: ireg_rdata = out_acc;
+			`TST_ADDR_PRED: ireg_rdata = pred;
+			`TST_ADDR_PART: ireg_rdata = part;
+			`TST_ADDR_LFSR_EXTRA_BITS: ireg_rdata = lfsr_extra_bits;
+			`TST_ADDR_OCT_COUNTER: ireg_rdata = oct_counter;
+		endcase
+	end
+`endif
 endmodule : pwls_ALU_unit
 
 
@@ -1037,13 +1168,20 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 		//   - Set en = 0, reg_raddr_p = read address on the cycle of the read
 		en, next_en,
 
-		input wire [$clog2(NUM_CHANNELS)+$clog2(`REGS_PER_CHANNEL)-1:0] reg_waddr,
+		input wire [`REG_ADDR_BITS-1:0] reg_waddr,
 		input wire [`REG_BITS-1:0] reg_wdata,
 		input wire reg_we,
 		input wire control_reg_write, state_reg_write, // Which part of registers to update?
 
-		input wire [5:0] reg_raddr_p, next_reg_raddr_p, // next_reg_raddr_p must be one cycle ahead of reg_raddr_p when reading
+		input wire [`REG_ADDR_BITS-1:0] reg_raddr_p, next_reg_raddr_p, // next_reg_raddr_p must be one cycle ahead of reg_raddr_p when reading
 		output wire [`REG_BITS-1:0] reg_rdata_p, // valid when `en` is low
+
+`ifdef USE_NEW_READ
+		input wire [`REG_ADDR_BITS-1:0] reg_raddr,
+		input wire reg_raddr_valid,
+		output wire [`REG_BITS] reg_rdata,
+		output wire reg_rdata_valid_next,
+`endif
 
 		// temporary global controls
 		//input wire [DETUNE_EXP_BITS-1:0] detune_exp,
@@ -1052,8 +1190,22 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 		input wire [BITS-3-1:0] slope_offset,
 		//input wire [BITS-2-1:0] amp,
 
+`ifdef USE_TEST_INTERFACE
+		input wire state_override_en,
+		input int state_override, // (term_index << 8) || state
+		input wire [1:0] step_part_enables, // {post_en, main_en}
+		// interface for internal registers
+		input int ireg_raddr, ireg_waddr,
+		output int ireg_rdata,
+		input int ireg_wdata,
+		// expose internal register writes
+		output wire reg_we_internal_out,
+		output int reg_waddr_internal_out,
+		output int reg_wdata_internal_out,
+`endif
+
 		// for debug
-		output wire [$clog2(NUM_CHANNELS)-1:0] term_index_out,
+		output int term_index_out,
 		output wire [`STATE_BITS-1:0] state_out,
 		output wire [BITS-1:0] tri_offset_eff_out,
 		output wire [15:0] curr_params_out,
@@ -1101,17 +1253,30 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 	reg [`STATE_BITS-1:0] state;
 	reg write_collision;
 
+	// not registers
+	reg [LOG2_TERMS-1:0] term_index_eff;
+	reg [`STATE_BITS-1:0] state_eff;
+	always_comb begin
+		term_index_eff = term_index;
+		state_eff = state;
+`ifdef USE_TEST_INTERFACE
+		if (state_override_en) begin
+			term_index_eff = state_override[15:8];
+			state_eff = state_override[7:0];
+		end
+`endif
+	end
 
 	// High if this is a waveform term
-	//wire wf_term = (term_index != NUM_WF_TERMS);
-	wire wf_term = !term_index[LOG2_TERMS-1]; // special case for NUM_CHANNELS = power of 2
+	//wire wf_term = (term_index_eff != NUM_WF_TERMS);
+	wire wf_term = !term_index_eff[LOG2_TERMS-1]; // special case for NUM_CHANNELS = power of 2
 	wire last_term = !wf_term; // is this the last term?
 	wire extra_term = !wf_term; // is this a term for extra updates? (no actual term...)
 
 
 	// Internal register write interface
 	wire reg_we_internal;
-	wire [$clog2(NUM_CHANNELS)+$clog2(`REGS_PER_CHANNEL)-1:0] reg_waddr_internal;
+	wire [`REG_ADDR_BITS-1:0] reg_waddr_internal;
 	wire [`REG_BITS-1:0] reg_wdata_internal = acc_out; // always write from acc
 
 
@@ -1123,12 +1288,17 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 	wire reg_we_eff = (reg_we && control_reg_write) || (reg_we_internal && !write_collision);
 	wire reg_cfg_we = reg_we && state_reg_write;
 
-	wire [$clog2(NUM_CHANNELS)+$clog2(`REGS_PER_CHANNEL)-1:0] reg_waddr_eff = reg_we ? reg_waddr : reg_waddr_internal;
-	wire [`REG_BITS-1:0]                                      reg_wdata_eff = reg_we ? reg_wdata : reg_wdata_internal;
+	wire [`REG_ADDR_BITS-1:0] reg_waddr_eff = reg_we ? reg_waddr : reg_waddr_internal;
+	wire [`REG_BITS-1:0]      reg_wdata_eff = reg_we ? reg_wdata : reg_wdata_internal;
 
 
-
+`ifdef USE_PHASE_LATCHES
+	localparam PHASE_INDEX = 4'd8;
+	wire [BITS-1:0] phases[NUM_CHANNELS];
+`else
 	(* mem2reg *) reg [BITS-1:0] phases[NUM_CHANNELS];
+`endif
+
 
 /*
 	(* mem2reg *) reg [PERIOD_BITS-1:0] periods[NUM_CHANNELS];
@@ -1215,17 +1385,21 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 			pwls_register #(.BITS(12))                 sweep_reg(  .clk(clk), .reset(reset), .we(16+i == reg_waddr_eff && reg_we_eff), .wdata(reg_wdata2), .rdata(sweeps[i]));
 `endif
 `endif
+
+`ifdef USE_PHASE_LATCHES
+			pwls_register #(.BITS(PHASE_BITS))        phases_reg( .clk(clk), .reset(reset), .we( 4*PHASE_INDEX+i == reg_waddr_eff && reg_we_eff), .wdata(reg_wdata2), .rdata(phases[i]));
+`endif
 		end
 	endgenerate
 
 	// Sample out_acc on the first cycle of the new sample, then it should just have been update. CONSIDER: better time/condition to use?
-	wire sample_out_acc = (state == '0 && term_index == '0) && en_eff;
+	wire sample_out_acc = (state_eff == '0 && term_index_eff == '0) && en_eff;
 
 
-	wire [`STATE_BITS+1-1:0] state_inc = state + en_eff;
-	wire next_term_if_en = (state == (wf_term ? `STATE_LAST : NUM_EXTRA_STATES-1));
+	wire [`STATE_BITS+1-1:0] state_inc = state_eff + en_eff;
+	wire next_term_if_en = (state_eff == (wf_term ? `STATE_LAST : NUM_EXTRA_STATES-1));
 	wire next_term = next_term_if_en && en_eff;
-	wire [LOG2_TERMS-1:0] next_term_index = term_index + next_term;
+	wire [LOG2_TERMS-1:0] next_term_index = term_index_eff + next_term;
 	wire next_sample = next_term && last_term; // also gated by en_eff
 	wire oct_counter_we = next_sample;
 	always_ff @(posedge clk) begin
@@ -1237,7 +1411,7 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 		else                      term_index <= next_term_index;
 	end
 
-	wire next_extra_term = next_term ? (term_index == NUM_WF_TERMS-1) : extra_term;
+	wire next_extra_term = next_term ? (term_index_eff == NUM_WF_TERMS-1) : extra_term;
 
 
 	/*
@@ -1268,13 +1442,12 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 	wire [`DIVIDER_BITS-1:0] sweep_oct_counter_term = pre_sweep_index[0] == 0 ? 8 : 32; // Period sweeps are applied every 8 samples, the others every 32 samples
 
 	// NOTE: Update if sweep mapping changes
-	assign reg_waddr_internal = {sweep_index, sweep_channel};
+	wire [`REG_ADDR_BITS-1:0] reg_waddr_sweep = {sweep_index, sweep_channel};
 
 
 
-
-	//wire [LOG2_CHANNELS-1:0] curr_channel = en_eff ? term_index >> $clog2(CHANNEL_TIMES) : reg_raddr_p[1:0];
-	wire [LOG2_CHANNELS-1:0] curr_channel_0 = en_eff ? (extra_term ? sweep_channel : term_index >> $clog2(CHANNEL_TIMES)) : reg_raddr_p[1:0];
+	//wire [LOG2_CHANNELS-1:0] curr_channel = en_eff ? term_index_eff >> $clog2(CHANNEL_TIMES) : reg_raddr_p[1:0];
+	wire [LOG2_CHANNELS-1:0] curr_channel_0 = en_eff ? (extra_term ? sweep_channel : term_index_eff >> $clog2(CHANNEL_TIMES)) : reg_raddr_p[1:0];
 
 	// Ok to use current sweep_channel, won't change the cycle before we need it
 	wire [LOG2_CHANNELS-1:0] next_curr_channel = next_en ? (next_extra_term ? sweep_channel : next_term_index >> $clog2(CHANNEL_TIMES)) : next_reg_raddr_p[1:0];
@@ -1296,8 +1469,15 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 
 
 
+`ifdef USE_PHASE_LATCHES
+	assign reg_waddr_internal = extra_term ? reg_waddr_sweep : {PHASE_INDEX, curr_channel};
+`else
+	assign reg_waddr_internal = reg_waddr_sweep;
+`endif
 
-	assign curr_sub_channel = DETUNE_ON ? term_index[0] : 0;
+
+
+	assign curr_sub_channel = DETUNE_ON ? term_index_eff[0] : 0;
 
 	wire [BITS-1:0] curr_phase = phases[curr_channel];
 	wire [PERIOD_BITS-1:0] curr_period = periods[curr_channel];
@@ -1390,7 +1570,7 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 	reg [`REG_BITS-1:0] rdata; // not a register
 	always_comb begin
 		rdata = 'X;
-		case (reg_raddr_p[5:2])
+		case (reg_raddr_p[`REG_ADDR_BITS-1:2])
 			0: rdata = curr_period;
 			1: rdata = amp >> (BITS-2-6);
 `ifdef USE_NEW_REGMAP
@@ -1452,7 +1632,7 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 		.OUT_ACC_INITIAL_TOP(OUT_ACC_INITIAL_TOP), .REV_PHASE_SHR(REV_PHASE_SHR), .AMP_BITS(AMP_BITS)
 	) alu_unit(
 		.clk(clk), .reset(reset), .en(alu_en),
-		.state(state), .extra_term(extra_term), .first_term(term_index == '0), .oct_counter_we(oct_counter_we), .sub_channel(curr_sub_channel),
+		.state(state_eff), .extra_term(extra_term), .first_term(term_index_eff == '0), .oct_counter_we(oct_counter_we), .sub_channel(curr_sub_channel),
 		.octave(octave),
 		//.octave(octave_reg),
 		.detune_exp(detune_exp), .slope_exp(slope_exp_eff), .channel_mode(channel_mode), .sweep_dir(sweep_dir), .sweep_index(sweep_index),
@@ -1462,6 +1642,10 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 		.hard_oct_enable_override_en(hard_oct_enable_override_en), .hard_oct_enable_override(hard_oct_enable_override),
 		.oct_enable_index_override_en(oct_enable_index_override_en), .oct_enable_index_override(oct_enable_index_override), .oct_counter_term(oct_counter_term),
 		.sample_counter(sample_counter),
+`ifdef USE_TEST_INTERFACE
+	.step_part_enables(step_part_enables),
+	.ireg_raddr(ireg_raddr), .ireg_waddr(ireg_waddr), .ireg_rdata(ireg_rdata), .ireg_wdata(ireg_wdata),
+`endif
 		.acc_out(acc_out), .out_acc_out(out_acc_out)
 	);
 
@@ -1470,7 +1654,9 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 		for (i = 0; i < NUM_CHANNELS; i++) begin
 			always_ff @(posedge clk) begin
 				if (reset) begin
+`ifndef USE_PHASE_LATCHES
 					phases[i] <= 0;
+`endif
 
 /*
 					periods[i] <= 0; // not needed?
@@ -1481,7 +1667,9 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 `endif
 */
 				end else begin
+`ifndef USE_PHASE_LATCHES
 					if (i == curr_channel && dest_sel == `DEST_SEL_PHASE && alu_en) phases[i] <= result;
+`endif
 
 /*
 					if (i == reg_waddr_eff && reg_we_eff) periods[i] <= reg_wdata_eff;
@@ -1517,7 +1705,7 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 // ==================
 
 	assign phase_out = curr_phase;
-	assign new_out_acc = (term_index == 0) && (state == 1); // should allow time for out_acc to be computed even with one cycle of pipelining
+	assign new_out_acc = (term_index_eff == 0) && (state_eff == 1); // should allow time for out_acc to be computed even with one cycle of pipelining
 
 	assign term_index_out = term_index;
 	assign state_out = state;
@@ -1534,4 +1722,9 @@ module pwls_multichannel_ALU_unit #(parameter BITS=12, BITS_E=13, SHIFT_COUNT_BI
 `endif
 `endif
 
+`ifdef USE_TEST_INTERFACE
+	assign reg_we_internal_out = reg_we_internal;
+	assign reg_waddr_internal_out = reg_waddr_internal;
+	assign reg_wdata_internal_out = reg_wdata_internal;
+`endif
 endmodule : pwls_multichannel_ALU_unit
