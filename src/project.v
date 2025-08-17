@@ -157,6 +157,7 @@ module tt_um_tt_tinyQV #(parameter CLOCK_MHZ=64) (
         .rst_n(rst_reg_n),
 
         .ui_in(ui_in_sync),
+        .ui_in_raw(ui_in),
         .uo_out(peri_out),
 
         .addr_in(addr[10:0]),

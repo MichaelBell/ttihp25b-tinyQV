@@ -31,6 +31,7 @@ project:
     - "user_peripherals/uart/peri_uart.v"
     - "user_peripherals/uart/uart_rx.v"
     - "user_peripherals/uart/uart_tx.v"
+    - "user_peripherals/spi.v"
     - "user_peripherals/game_pmod.v"
     - "user_peripherals/encoder/debounce.v"
     - "user_peripherals/encoder/encoder.v"

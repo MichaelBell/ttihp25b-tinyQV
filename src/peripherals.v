@@ -19,6 +19,7 @@ module tinyQV_peripherals #(parameter CLOCK_MHZ=64) (
     input         rst_n,
 
     input  [7:0]  ui_in,        // The input PMOD, always available
+    input  [7:0]  ui_in_raw,    // The input PMOD, not synchronized
     output [7:0]  uo_out,       // The output PMOD.  Each wire is only connected if this peripheral is selected
 
     input [10:0]  addr_in,
@@ -644,11 +645,11 @@ module tinyQV_peripherals #(parameter CLOCK_MHZ=64) (
         .data_out(data_from_simple_peri[13])
     );
 
-    tqvp_byte_empty i_user_simple014 (
+    tqvp_spi_peripheral i_user_simple014 (
         .clk(clk),
         .rst_n(rst_n),
 
-        .ui_in(ui_in),
+        .ui_in(ui_in_raw),
         .uo_out(uo_out_from_simple_peri[14]),
 
         .address(addr_in[3:0]),
