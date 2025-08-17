@@ -14,6 +14,7 @@ USER_PERIPHERALS = \
 	baby_vga.test \
 	pwl_synth.test \
 	prism.test \
+	vgaconsole.test \
 	wdt.test \
 	tqvp_laurie_dwarf_line_table_accelerator.test \
 	pulse_transmitter.test \
