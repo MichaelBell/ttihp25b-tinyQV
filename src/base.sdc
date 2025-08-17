@@ -12,7 +12,7 @@ set_input_delay 1.5 -clock [get_clocks $::env(CLOCK_PORT)] {rst_n}
 # Note "setup" is actually 1 clock cycle minus setup, so this requires a setup
 # period of 35% of the clock cycle
 set input_setup_delay_value [expr $::env(CLOCK_PERIOD) * 0.65]
-set input_hold_delay_value [expr $::env(CLOCK_PERIOD) * 0.2]
+set input_hold_delay_value [expr $::env(CLOCK_PERIOD) * 0.24]
 set_input_delay -clock [get_clocks $::env(CLOCK_PORT)] -max $input_setup_delay_value {uio_in ui_in}
 set_input_delay -clock [get_clocks $::env(CLOCK_PORT)] -min $input_hold_delay_value {uio_in ui_in}
 
