@@ -1,6 +1,6 @@
-module ws2812b #(parameter CLOCK_MHZ=64) (
+module ws2812b (
     input wire clk,               // 64 MHz input clock
-    input wire reset,
+    input wire rst_n,
     input wire [23:0] data_in,    // color data
     input wire valid,
     input wire latch,
@@ -8,24 +8,35 @@ module ws2812b #(parameter CLOCK_MHZ=64) (
     output reg led                // output signal to LED strip
 );
 
-  // Define timing parameters according to WS2812B datasheet
-  localparam T0H = 400e-9;       // width of '0' high pulse (400ns)
-  localparam T1H = 800e-9;       // width of '1' high pulse (800ns)
-  localparam T0L = 850e-9;       // width of '0' low pulse (850ns)
-  localparam T1L = 450e-9;       // width of '1' low pulse (450ns)
-  localparam PERIOD = 1250e-9;   // total period of one bit (1250ns)
-  localparam RES_DELAY = 325e-6; // reset duration (325us)
+  localparam CLOCK_HZ = 64_000_000;
+  localparam NS_PER_S = 1_000_000_000;
 
-  // Calculate clock cycles needed based on input clock frequency
-  parameter CLOCK_FREQ = CLOCK_MHZ * 1e6; // 64 MHz
+  function [15:0] cycles_from_ns;
+  input [31:0] ns;     // argument in ns
+  reg   [63:0] num;    // wide intermediate
+  reg   [63:0] q64;
+  begin
+    num = (64'd64_000_000 * ns) + 64'd500_000_000;
+    q64 = num / 64'd1_000_000_000;
+    cycles_from_ns = q64[15:0];
+  end
+  endfunction
+
+  // Define timing parameters according to WS2812B datasheet
+  localparam T0H = 400;             // width of '0' high pulse (400 ns)
+  localparam T1H = 800;             // width of '1' high pulse (800 ns)
+  localparam T0L = 850;             // width of '0' low pulse (850 ns)
+  localparam T1L = 450;             // width of '1' low pulse (450 ns)
+  localparam PERIOD = 1250;         // total period of one bit (1250 ns)
+  localparam RES_DELAY = 325_000;   // reset duration (325 us)
 
   // Calculate clock cycles for each timing parameter
-  localparam [15:0] CYCLES_PERIOD = $floor(CLOCK_FREQ * PERIOD);
-  localparam [15:0] CYCLES_T0H = $floor(CLOCK_FREQ * T0H);
-  localparam [15:0] CYCLES_T1H = $floor(CLOCK_FREQ * T1H);
-  localparam [15:0] CYCLES_T0L = CYCLES_PERIOD - CYCLES_T0H;
-  localparam [15:0] CYCLES_T1L = CYCLES_PERIOD - CYCLES_T1H;
-  localparam [15:0] CYCLES_RESET = $floor(CLOCK_FREQ * RES_DELAY);
+  localparam [15:0] CYCLES_PERIOD = cycles_from_ns(PERIOD);
+  localparam [15:0] CYCLES_T0H = cycles_from_ns(T0H);
+  localparam [15:0] CYCLES_T1H = cycles_from_ns(T1H);
+  localparam [15:0] CYCLES_T0L = cycles_from_ns(PERIOD - T0H);
+  localparam [15:0] CYCLES_T1L = cycles_from_ns(PERIOD - T1H);
+  localparam [15:0] CYCLES_RESET = cycles_from_ns(RES_DELAY);
 
   // state machine
   parameter IDLE = 0, START = 1, SEND_BIT = 2, RESET = 3;
@@ -38,7 +49,7 @@ module ws2812b #(parameter CLOCK_MHZ=64) (
 
   // State machine logic
   always @(posedge clk) begin
-    if (reset) begin
+    if (!rst_n) begin
       state <= RESET;
       bitpos <= 0;
       time_counter <= 0;
@@ -52,7 +63,7 @@ module ws2812b #(parameter CLOCK_MHZ=64) (
           bitpos <= 0;
           time_counter <= 0;
           led <= 0;
-          if (ready & valid) begin
+          if (ready && valid) begin
             data <= data_in;
             will_latch <= latch;
             ready <= 0;
@@ -98,11 +109,18 @@ module ws2812b #(parameter CLOCK_MHZ=64) (
           end else begin
             // Reset complete, return to idle
             state <= IDLE;
+            time_counter <= 0;
           end
         end
 
         default: begin
           state <= RESET;
+          bitpos <= 0;
+          time_counter <= 0;
+          led <= 0;
+          ready <= 0;
+          data <= 24'b0;
+          will_latch <= 0;
         end
       endcase
     end

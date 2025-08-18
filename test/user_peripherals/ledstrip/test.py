@@ -25,6 +25,8 @@ async def test_single_pixel1(dut):
     tqv = TinyQV(dut, PERIPHERAL_NUM)
     await tqv.reset()
 
+    await ClockCycles(dut.clk, 1000)
+
     dut._log.info("PUSH 1 PIXEL WITH DEFAULT COLOR (R=32, G=0, B=0)")
 
     # wait for peripheral to be ready
