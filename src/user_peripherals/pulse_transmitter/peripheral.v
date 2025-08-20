@@ -8,10 +8,7 @@
 // Change the name of this module to something that reflects its functionality and includes your name for uniqueness
 // For example tqvp_yourname_spi for an SPI peripheral.
 // Then edit tt_wrapper.v line 41 and change tqvp_example to your chosen module name.
-module tqvp_hx2003_pulse_transmitter # (
-    parameter CARRIER_TIMER_WIDTH = 12, // Do not change these parameters, as the register mapping will not be updated
-    parameter LOOP_COUNTER_WIDTH = 8    // Do not change these parameters, as the register mapping will not be updated
-) ( 
+module tqvp_hx2003_pulse_transmitter ( 
     input         clk,          // Clock - the TinyQV project clock is normally set to 64MHz.
     input         rst_n,        // Reset_n - low to reset.
 
@@ -35,7 +32,9 @@ module tqvp_hx2003_pulse_transmitter # (
 );
 
     // Local Fixed parameters (do not change)
-    localparam NUM_DATA_REG = 8; // NUM_DATA_REG must be power of 2 as we depend on the program to rollover, see rollover / wrapping test
+    localparam CARRIER_TIMER_WIDTH = 11; // Do not change these parameters, as the register mapping will not be updated
+    localparam LOOP_COUNTER_WIDTH = 8;   // Do not change these parameters, as the register mapping will not be updated
+    localparam NUM_DATA_REG = 8;         // Do not change these parameters, NUM_DATA_REG must be power of 2 as we depend on the program to rollover, see rollover / wrapping test
 
     // Calculated parameters
     localparam DATA_REG_ADDR_NUM_BITS = $clog2(NUM_DATA_REG);
@@ -82,16 +81,16 @@ module tqvp_hx2003_pulse_transmitter # (
     wire [3:0] config_auxillary_prescaler = reg_3[27:24];
     wire [3:0] config_main_prescaler = reg_3[31:28];
 
-    reg [11:0] reg_4;
-    wire [11:0] config_carrier_duration = reg_4[11:0];
+    reg [10:0] reg_4;
+    wire [10:0] config_carrier_duration = reg_4[10:0];
 
     // Interrupt
     assign user_interrupt = `interrupt_status_register > 0;
     
     wire [3:0] interrupt_event_flag = {
-        program_counter_mid_interrupt, // bit 3 (program_counter_mid_interrupt)
+        program_counter_mid_event, // bit 3 (program_counter_mid_interrupt)
         terminate_program, // bit 2 (program_end_interrupt)
-        loop_interrupt, // bit 1 (loop_interrupt)
+        program_loop_event, // bit 1 (program_loop_interrupt)
         timer_pulse_out // bit 0 (timer_interrupt)
     } & config_interrupt_enable_mask;
 
@@ -105,7 +104,21 @@ module tqvp_hx2003_pulse_transmitter # (
         .pulse_out(start_pulse)
     );
     
+    wire start_pulse_delayed_1;
+    wire start_pulse_delayed_2;
+    delay_2 start_pulse_delayer(
+        .clk(clk),
+        .sys_rst_n(rst_n),
+        .sig_in(start_pulse),
+        .sig_delayed_1_out(start_pulse_delayed_1),
+        .sig_delayed_2_out(start_pulse_delayed_2)
+    );
+    
     reg [31:0] PROGRAM_DATA_MEM[(NUM_DATA_REG - 1):0];
+
+    // -----------------------
+    //     Write Registers
+    // -----------------------
 
     // Writing of registers / program data symbol
     // Note: Unaligned accesses may NOT be checked
@@ -152,7 +165,7 @@ module tqvp_hx2003_pulse_transmitter # (
                         3'd1: reg_1 <= data_in[31:0];
                         3'd2: reg_2 <= data_in[31:0];
                         3'd3: reg_3 <= data_in[31:0];
-                        3'd4: reg_4 <= data_in[11:0];
+                        3'd4: reg_4 <= data_in[10:0];
                         default: begin
                             // Do nothing
                         end
@@ -171,37 +184,8 @@ module tqvp_hx2003_pulse_transmitter # (
         end
     end
 
-    // Apply optional carrier
-    wire modulated_output = config_carrier_en ? (saved_transmit_level && carrier_out): saved_transmit_level;
 
-    // Insert idle level when not transmitting
-    wire active_or_idle_output = (valid_output) ? modulated_output : config_idle_level;
-    
-    // Apply optional inversion
-    wire final_output = active_or_idle_output ^ config_invert_output;
-    
-    wire carrier_out;
-    
-    carrier #(.TIMER_WIDTH(CARRIER_TIMER_WIDTH)) carrier_timer(
-        .clk(clk),
-        .sys_rst_n(rst_n),           
-        .en(`program_status_register && !start_pulse && !start_pulse_delayed_1),
-        .duration(config_carrier_duration),
-        .out(carrier_out)
-    );
-
-    wire start_pulse_delayed_1;
-    wire start_pulse_delayed_2;
-    delay_2 start_pulse_delayer(
-        .clk(clk),
-        .sys_rst_n(rst_n),
-        .sig_in(start_pulse),
-        .sig_delayed_1_out(start_pulse_delayed_1),
-        .sig_delayed_2_out(start_pulse_delayed_2)
-    );
-
-
-    wire timer_request_data;
+    wire countdown_timer_request_data_event;
     wire timer_pulse_out;
     wire timer_pulse_out_with_initial = start_pulse_delayed_1 || timer_pulse_out;
     reg [7:0] duration;
@@ -212,7 +196,7 @@ module tqvp_hx2003_pulse_transmitter # (
         .en(`program_status_register && !start_pulse && !start_pulse_delayed_1),
         .prescaler(prescaler),
         .duration(duration),
-        .request_data(timer_request_data),
+        .request_data(countdown_timer_request_data_event),
         .pulse_out(timer_pulse_out)
     );
 
@@ -306,11 +290,10 @@ module tqvp_hx2003_pulse_transmitter # (
     // This is because it takes some cycles to fetch and prefetch the symbols.
     wire valid_output = `program_status_register && !start_pulse && !start_pulse_delayed_1 && !start_pulse_delayed_2;
 
-    // The program counter should increment:
-    // once for start_pulse (we fetch the current symbol and increment program_counter)
-    // every time we trigger the timer (note: program counter is incremented before timer has elapsed, because we want to prefetch)
-    wire program_counter_increment_trigger = timer_request_data;
-    
+    // -----------------------
+    //  Program Counter Logic
+    // -----------------------
+
     // The program counter is 8 bits, so between 0 to 255
     //
     // In 2bpe (2 bit per element) mode, program_counter is incremented by 2 each time
@@ -321,88 +304,147 @@ module tqvp_hx2003_pulse_transmitter # (
     //
     // config_program_start_index, config_program_end_index and config_program_loopback_index
     // can be any value between 0 to 255 inclusive
+    //
+    // The code for the program counter logic is split into 2 main sections:
+    // the always @(*) combinatoric block
+    // the always @(posedge clk) block
+    //
+    // I want to minimise the use of flip flops as much as possible (they take too much space!)
+    // To avoid writing the same if/else conditions in both blocks twice, I have put most of the logic in
+    // the always @(*) combinatoric block, and when the flip flop needs to be updated they are done in the @(posedge clk) block
+
+    reg program_counter_mid_event;
+    reg program_counter_update_event;
+    reg program_loop_event;
+    reg program_end_of_file_event;
+
+    always @(*) begin
+        // Defaults to zero
+        program_counter_mid_event = 1'b0;
+        program_counter_update_event = 1'b0;
+        program_loop_event = 1'b0;
+        program_end_of_file_event = 1'b0;
+
+        // countdown_timer_request_data_event triggers at least 1 cycle (may be more depending on prescaler)
+        // before timer_pulse_out/timer_pulse_out_with_initial.
+        // This is so that the updated program counter, next duration and prescaler etc..
+        // will be immediately available to the countdown timer when the countdown timer is completed
+
+        if (countdown_timer_request_data_event) begin
+            if(config_use_2bpe || sequence_done_in_1bpe) begin
+                // We only want the program_counter_mid_interrupt to trigger once every time the program counter is at 128
+                // Note, this does not mean it triggers at this interval
+                if (program_counter == 128) begin
+                    program_counter_mid_event = 1'b1;
+                end
+                
+                if (program_counter == config_program_end_index) begin
+                    if (!config_loop_forever && (program_loop_counter == 0)) begin
+                        // Set program_end_of_file
+                        // But do not disable output yet, as the preloaded values are not yet flushed out
+                        program_end_of_file_event = 1'b1;
+                    end else begin
+                        // We want to loop, set the program counter
+                        program_loop_event = 1'b1;
+                    end
+                end else begin
+                    program_counter_update_event = 1'b1;
+                end
+            end
+        end
+    end
 
     // In 1bpe mode, each element is expanded to 2 symbols we need to keep track of which symbol we are currently at
     reg sequence_done_in_1bpe;
-
     reg [7:0] program_counter;
     reg [(LOOP_COUNTER_WIDTH - 1):0] program_loop_counter;
     reg program_end_of_file;
-    reg loop_interrupt; // should only be activated for 1 pulse
-    reg program_counter_mid_interrupt; // should only be activated for 1 pulse
-
+    
     always @(posedge clk) begin
         if (!rst_n || !`program_status_register) begin
             program_loop_counter <= config_program_loop_count;
             program_end_of_file <= 0;
             program_counter <= config_program_start_index;
-            loop_interrupt <= 0;
-            program_counter_mid_interrupt <= 0;
             sequence_done_in_1bpe <= 0;
         end else begin
-            loop_interrupt <= 0; // default value, can be overridden later
-            program_counter_mid_interrupt <= 0; // default value, can be overridden later
-
-            if (program_counter_increment_trigger) begin
-                // Toggle this every time,
+            if (countdown_timer_request_data_event) begin
+                // Toggle sequence_done_in_1bpe every time,
                 // In 1bpe mode: it starts from 0 -> 1 -> 0 -> 1 -> 0 -> ...
                 // only when sequence_done_in_1bpe is 1 when something is done, so program_counter is incremented half as often 
                 //
                 // In 2bpe mode: sequence_done_in_1bpe will be ignored
                 sequence_done_in_1bpe <= !sequence_done_in_1bpe;
-                
-                if(config_use_2bpe || sequence_done_in_1bpe) begin
-                    // We only want the interrupt to trigger once every time the program counter is at 128
-                    // Note, this does not mean it triggers at this interval
-                    if (program_counter == 128) begin
-                        program_counter_mid_interrupt <= 1'b1;
-                    end
+            end
 
-                    if (program_counter == config_program_end_index) begin
-                        if (!config_loop_forever && (program_loop_counter == 0)) begin
-                            // Set program_end_of_file
-                            // But do not disable output yet, as the preloaded values are not yet flushed out
-                            program_end_of_file <= 1;
-                        end else begin
-                            // We want to loop, set the program counter
-                            program_counter <= config_program_loopback_index;
-                            program_loop_counter <= program_loop_counter - 1;
-                            loop_interrupt <= 1'b1;
-                        end
+            if (program_counter_update_event) begin
+                // Less utilization
+                if (config_downcount) begin
+                    if (config_use_2bpe) begin
+                        program_counter <= program_counter - 2;
                     end else begin
-                        // Less utilization
-                        if (config_downcount) begin
-                            if (config_use_2bpe) begin
-                                program_counter <= program_counter - 2;
-                            end else begin
-                                program_counter <= program_counter - 1;
-                            end
-                        end else begin
-                            if (config_use_2bpe) begin
-                                program_counter <= program_counter + 2;
-                            end else begin
-                                program_counter <= program_counter + 1;
-                            end
-                        end
+                        program_counter <= program_counter - 1;
+                    end
+                end else begin
+                    if (config_use_2bpe) begin
+                        program_counter <= program_counter + 2;
+                    end else begin
+                        program_counter <= program_counter + 1;
                     end
                 end
+            end
+
+            if (program_loop_event) begin
+                // We want to loop, set the program counter
+                program_counter <= config_program_loopback_index;
+                program_loop_counter <= program_loop_counter - 1;
+            end
+
+            if (program_end_of_file_event) begin
+                // Set program_end_of_file
+                // But do not disable output yet, as the preloaded values are not yet flushed out
+                program_end_of_file <= 1;
             end
         end
     end
 
     wire terminate_program = timer_pulse_out_with_initial && program_end_of_file;
 
+    // -----------------------
+    //      Output Stage
+    // -----------------------
+
+    // Apply optional carrier
+    wire modulated_output = config_carrier_en ? (saved_transmit_level && carrier_out): saved_transmit_level;
+
+    // Insert idle level when not transmitting
+    wire active_or_idle_output = (valid_output) ? modulated_output : config_idle_level;
+    
+    // Apply optional inversion
+    wire final_output = active_or_idle_output ^ config_invert_output;
+    
+    wire carrier_out;
+    
+    carrier #(.TIMER_WIDTH(CARRIER_TIMER_WIDTH)) carrier_timer(
+        .clk(clk),
+        .sys_rst_n(rst_n),           
+        .en(valid_output),
+        .duration(config_carrier_duration),
+        .out(carrier_out)
+    );
+
+    wire carrier_or_idle_output = valid_output ? carrier_out : 1'b0;
+
     // Pin outputs
-    assign uo_out[1:0] = 0;
-    assign uo_out[2] = carrier_out;
-    assign uo_out[3] = valid_output;
-    assign uo_out[7:4] = {final_output, final_output, final_output, final_output};
-  
+    assign uo_out[1:0] = {valid_output, valid_output};
+    assign uo_out[2] = user_interrupt;
+    assign uo_out[4:3] = {carrier_or_idle_output, carrier_or_idle_output};
+    assign uo_out[7:5] = {final_output, final_output, final_output};
+    
     // Read address doesn't matter
     assign data_out[4:0] = reg_0[4:0];
     assign data_out[7:5] = 3'b0;
-    assign data_out[15:8] = program_loop_counter;
-    assign data_out[23:16] = program_counter;
+    assign data_out[15:8] = program_counter;
+    assign data_out[23:16] = program_loop_counter;
     assign data_out[31:24] = 8'b0;
 
     // All reads complete in 1 clock

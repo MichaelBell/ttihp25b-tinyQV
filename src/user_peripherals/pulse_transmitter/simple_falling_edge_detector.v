@@ -6,10 +6,10 @@
 // Simple synchronous falling edge detector
 
 module simple_falling_edge_detector (
-    input clk,           
-    input rst_n,            
-    input sig_in,
-    output pulse_out
+    input wire clk,           
+    input wire rst_n,            
+    input wire sig_in,
+    output wire pulse_out
 );          
 
     reg sig_delayed;
