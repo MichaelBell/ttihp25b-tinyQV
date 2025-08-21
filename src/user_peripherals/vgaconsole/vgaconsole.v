@@ -166,7 +166,8 @@ module tqvp_cattuto_vgaconsole #(parameter CLOCK_MHZ=64) (
     // Drive character ROM input
     //wire [6:0] char_index = text[char_y * NUM_COLS + char_x];
     wire [4:0] char_addr = ({{(5-ROWS_ADDR_WIDTH){1'b0}}, char_y} << 3) + ({{(5-ROWS_ADDR_WIDTH){1'b0}}, char_y} << 1) + char_x;  // we hardcode NUM_COLS = 10 to save gates
-    wire [6:0] char_index = text[char_addr];
+    wire [4:0] char_addr_safe = (char_addr < NUM_CHARS) ? char_addr : 5'd0;
+    wire [6:0] char_index = text[char_addr_safe];
 
     // Character pixel coordinates relative to the 5x7 glyph padded in a 6x8 character box
     wire [2:0] rel_y = pix_y_frame[6:4];  // remainder of division by 8
@@ -176,7 +177,8 @@ module tqvp_cattuto_vgaconsole #(parameter CLOCK_MHZ=64) (
 
     // Look up character pixel value in character ROM,
     // handling 1-pixel padding along x and y directions.
-    wire char_pixel = (&rel_y || rel_x_5) ? 1'b0 : char_data[offset];
+    wire padding = (&rel_y) || rel_x_5;
+    wire char_pixel = (~padding) & char_data[padding ? 6'd0 : offset];
 
     // Generate RGB signals
     wire pixel_on = frame_active & char_pixel;
