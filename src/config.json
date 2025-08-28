@@ -40,8 +40,8 @@
   "//": "https://tinytapeout.com/faq/#how-can-i-map-an-additional-external-clock-to-one-of-the-gpios",
   "CLOCK_PORT": "clk",
 
-  "//": "Try to improve antenna violations",
-  "GRT_ANTENNA_ITERS": 10,
+  "//": "Antenna fixing is broken and inserts excessive diodes so just run one iteration",
+  "GRT_ANTENNA_ITERS": 1,
   "GRT_ANTENNA_MARGIN": 15,
 
   "//": "Configuration docs: https://openlane.readthedocs.io/en/latest/reference/configuration.html",
