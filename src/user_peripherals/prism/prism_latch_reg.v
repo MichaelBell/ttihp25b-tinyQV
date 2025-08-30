@@ -72,12 +72,7 @@ module prism_latch_reg
         
         for (b = 0; b < WIDTH; b = b + 1)
         begin : gen_prism_bit
-`ifdef SCL_sg13g2_stdcell
             (* keep = 1 *) sg13g2_dlhq_1 prism_cfg_bit
-`endif
-`ifdef SCL_sky130_fd_sc_hd
-            (* keep = 1 *) sky130_fd_sc_hd__dlxtp_1 prism_cfg_bit
-`endif
             (
                 .D    (data_in[b]),
                 .GATE (gate),

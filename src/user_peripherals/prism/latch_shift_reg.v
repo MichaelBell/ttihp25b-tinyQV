@@ -58,12 +58,7 @@ module latch_shift_reg
     begin : gen_prism_reg
         for (b = 0; b < WIDTH; b = b + 1)
         begin : gen_prism_bit
-`ifdef SCL_sg13g2_stdcell
             sg13g2_dlhq_1 prism_cfg_bit
-`endif
-`ifdef SCL_sky130_fd_sc_hd
-            sky130_fd_sc_hd__dlxtp_1 prism_cfg_bit
-`endif
             (
                 .D((i == 0) ? data_in[b] : latch_regs[i-1][b]),
                 .GATE(latch_en[i] | !rst_n),

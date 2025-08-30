@@ -133,10 +133,3 @@
 //`define USE_EXTRA_DELAY_BUFFERS
 `endif
 
-
-// Define SCL_sky130_fd_sc_hd if not pure RTL and not IHP. Shouldn't be needed, but seems to be needed for my local runs at least.
-`ifndef PURE_RTL
-`ifndef SCL_sg13g2_stdcell
-`define SCL_sky130_fd_sc_hd
-`endif
-`endif

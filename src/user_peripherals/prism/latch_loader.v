@@ -99,14 +99,8 @@ module latch_loader
       for (i = 0; i < DEPTH; i = i + 1)
       begin : AND_GEN
          /* verilator lint_off PINMISSING */
-`ifdef SCL_sg13g2_stdcell
          // Instantiate IHP AND gate for latch enable
          (* keep = 1 *) sg13g2_and2_1 gate_and
-`endif
-`ifdef SCL_sky130_fd_sc_hd
-         // Instantiate SKY130 AND gate for latch enable
-         (* keep = 1 *) sky130_fd_sc_hd__and2_1 gate_and
-`endif
                        (
                            .A ( idx_decode[i] ),
                            .B ( latch_pulse   ),
