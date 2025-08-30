@@ -45,7 +45,6 @@ project:
     - "user_peripherals/impostor_ws2812b/ws2812b_pulse_decoder.v"
     - "user_peripherals/ubcd/ascii.v"
     - "user_peripherals/pulse_transmitter/peripheral.v"
-    - "user_peripherals/prism/latch_loader.v"
     - "user_peripherals/pulse_transmitter/simple_rising_edge_detector.v"
     - "tinyQV/cpu/time.v"
     - "tinyQV/cpu/register.v"
@@ -97,6 +96,7 @@ project:
     - "user_peripherals/waveforms/peripheral.sv"
     - "user_peripherals/tqvp_dsatizabal_fpu.sv"
     - "user_peripherals/prism/prism.v"
+    - "user_peripherals/prism/latch_loader.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 pinout:
