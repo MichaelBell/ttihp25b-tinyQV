@@ -17,6 +17,7 @@ project:
   # Source files must be in ./src and you must list each source file separately, one per line.
   # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
   source_files:
+    - "user_peripherals/prism/latch_loader.v"
     - "user_peripherals/prism/latch_shift_reg.v"
     - "user_peripherals/pulse_transmitter/delay_2.v"
     - "user_peripherals/impostor_ws2812b/impostor_ws2812b.v"
@@ -96,7 +97,6 @@ project:
     - "user_peripherals/waveforms/peripheral.sv"
     - "user_peripherals/tqvp_dsatizabal_fpu.sv"
     - "user_peripherals/prism/prism.v"
-    - "user_peripherals/prism/latch_loader.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 pinout:
